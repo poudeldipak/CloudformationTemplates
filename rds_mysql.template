@@ -1,0 +1,1693 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "rds_mysql.template - Creates the necessary resources for an RDS instance. Please be aware that this template will create resources for which you will be charged.",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Parameters": [
+            "ExistingSubnetGroup",
+            "SecurityGroupList",
+            "Subnets"
+          ],
+          "Label": {
+            "default": "Network Configuration"
+          }
+        },
+        {
+          "Parameters": [
+            "BackupRetentionPeriod",
+            "DBSnapshotName",
+            "PreferredBackupWindow",
+            "PreferredMaintenanceWindow"
+          ],
+          "Label": {
+            "default": "Backups and Maintenance Configuration"
+          }
+        },
+        {
+          "Parameters": [
+            "CopyTagsToSnapshot",
+            "DBInstanceClass",
+            "DBInstanceIdentifier",
+            "DBName",
+            "DBNameVersion",
+            "DeletionProtection",
+            "EngineVersion",
+            "Environment",
+            "ExistingOptionGroup",
+            "ExistingParameterGroup",
+            "Port",
+            "RDSVolumeIops",
+            "RDSVolumeSize",
+            "RDSVolumeType",
+            "Timezone"
+          ],
+          "Label": {
+            "default": "Basic Configuration"
+          }
+        },
+        {
+          "Parameters": [
+            "AutoMinorVersionUpgrade",
+            "KmsKeyId",
+            "MultiAZ",
+            "PubliclyAccessible",
+            "StorageEncrypted"
+          ],
+          "Label": {
+            "default": "Advanced Configuration"
+          }
+        },
+        {
+          "Parameters": [
+            "CWCPUThreshold",
+            "CWFreeStorageSpaceLimit",
+            "CWReadIopsLimit",
+            "CWWriteIopsLimit",
+            "EnhancedMonitoringInterval",
+            "EventCategories",
+            "NotificationTopic"
+          ],
+          "Label": {
+            "default": "Monitoring Configuration"
+          }
+        },
+        {
+          "Parameters": [
+            "MasterUserPassword",
+            "MasterUsername"
+          ],
+          "Label": {
+            "default": "RDS Access Credentials"
+          }
+        },
+        {
+          "Parameters": [
+            "EnhancedMonitoringRoleManagedPolicyArns",
+            "RDSKMSRoleManagedPolicyArns"
+          ],
+          "Label": {
+            "default": "IAM Configuration"
+          }
+        },
+        {
+          "Parameters": [
+            "InternalRecordName",
+            "InternalZoneId",
+            "InternalZoneName"
+          ],
+          "Label": {
+            "default": "Internal DNS Configuration"
+          }
+        }
+      ],
+      "ParameterLabels": {
+        "SecurityGroupList": {
+          "default": "Security Groups"
+        }
+      }
+    }
+  },
+  "Parameters": {
+    "InternalRecordName": {
+      "Default": "",
+      "Type": "String",
+      "Description": "Record Name for the new Resource Record in the Internal Hosted Zone"
+    },
+    "DBNameVersion": {
+      "Default": "v00",
+      "Type": "String",
+      "Description": "NOTE: This needs to increment on update with new snapshot"
+    },
+    "PubliclyAccessible": {
+      "Default": "False",
+      "Type": "String",
+      "ConstraintDescription": "Must be either True or False.",
+      "Description": "Indicates whether the database instance is an Internet-facing instance.",
+      "AllowedValues": [
+        "True",
+        "False"
+      ]
+    },
+    "MasterUsername": {
+      "ConstraintDescription": "Must be between 1 and 16 characters and begin with a letter.",
+      "Description": "The name of master user for the client DB instance.",
+      "Default": "dbadmin",
+      "MinLength": "1",
+      "AllowedPattern": "^[^\\d][a-zA-Z0-9_]+?$",
+      "MaxLength": "16",
+      "Type": "String"
+    },
+    "EngineVersion": {
+      "Default": "mysql-8.0.13",
+      "Type": "String",
+      "Description": "Database Engine and Minor Version http://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_CreateDBInstance.html",
+      "AllowedValues": [
+        "mysql-5.5.46",
+        "mysql-5.5.53",
+        "mysql-5.5.54",
+        "mysql-5.5.57",
+        "mysql-5.5.59",
+        "mysql-5.5.61",
+        "mysql-5.6.34",
+        "mysql-5.6.35",
+        "mysql-5.6.37",
+        "mysql-5.6.39",
+        "mysql-5.6.40",
+        "mysql-5.6.41",
+        "mysql-5.7.16",
+        "mysql-5.7.17",
+        "mysql-5.7.19",
+        "mysql-5.7.21",
+        "mysql-5.7.22",
+        "mysql-5.7.23",
+        "mysql-8.0.11",
+        "mysql-8.0.13"
+      ]
+    },
+    "Environment": {
+      "Default": "Development",
+      "Type": "String",
+      "Description": "Application environment for which this network is being created. e.g. Development/Production.",
+      "AllowedValues": [
+        "Development",
+        "Integration",
+        "PreProduction",
+        "Production",
+        "QA",
+        "Staging",
+        "Test"
+      ]
+    },
+    "CWWriteIopsLimit": {
+      "Default": "100",
+      "Type": "Number",
+      "Description": "CloudWatch Write IOPSLimit Threshold"
+    },
+    "MasterUserPassword": {
+      "Description": "Leaving this blank will auto generate a secure password with Secrets Mangaer. WARNING: Not available in all regions. See: https://aws.amazon.com/about-aws/global-infrastructure/regional-product-services/. Must be between 8 and 41 characters and cannot contain '@', '\"', or '\\/'.",
+      "Default": "",
+      "AllowedPattern": "^[\\p{ASCII}&&[^@\\s\\/\"]]+$||^$",
+      "NoEcho": true,
+      "MaxLength": "41",
+      "Type": "String"
+    },
+    "RDSVolumeType": {
+      "Default": "gp2",
+      "Type": "String",
+      "Description": "Select RDS Volume Type.",
+      "AllowedValues": [
+        "io1",
+        "standard",
+        "gp2"
+      ]
+    },
+    "ExistingParameterGroup": {
+      "Description": "The existing Parameter group to use for this instance. (OPTIONAL)",
+      "Default": "",
+      "Type": "String",
+      "AllowedPattern": "^([a-zA-Z0-9]+-?)*[a-zA-Z0-9]$||^$",
+      "MaxLength": 255,
+      "ConstraintDescription": "Must contain from 0 to 255 characters. Alphanumeric characters, spaces, hyphens, underscores, and periods are allowed."
+    },
+    "CopyTagsToSnapshot": {
+      "Default": "True",
+      "Type": "String",
+      "ConstraintDescription": "Must be either True or False.",
+      "Description": "Indicates whether to copy all of the user-defined tags from the DB instance to snapshots of the DB instance.",
+      "AllowedValues": [
+        "True",
+        "False"
+      ]
+    },
+    "ExistingOptionGroup": {
+      "Description": "The existing Option group to use for this instance. (OPTIONAL)",
+      "Default": "",
+      "Type": "String",
+      "AllowedPattern": "^([a-zA-Z0-9]+-?)*[a-zA-Z0-9]$||^$",
+      "MaxLength": 255,
+      "ConstraintDescription": "Must contain from 0 to 255 characters. Alphanumeric characters, spaces, hyphens, underscores, and periods are allowed."
+    },
+    "Subnets": {
+      "Type": "List<AWS::EC2::Subnet::Id>",
+      "Description": "Subnets for RDS Instances"
+    },
+    "EventCategories": {
+      "Default": "",
+      "Type": "CommaDelimitedList",
+      "Description": "A list of RDS event categories.  Submissions will be made to the provided NotificationTopic for each matching event. Acceptable values can be found with the CLI command 'aws rds describe-event-categories' (OPTIONAL)"
+    },
+    "SecurityGroupList": {
+      "Type": "List<AWS::EC2::SecurityGroup::Id>",
+      "Description": "A list of EC2 security groups to assign to this resource."
+    },
+    "AutoMinorVersionUpgrade": {
+      "Default": "True",
+      "Type": "String",
+      "ConstraintDescription": "Must be either True or False.",
+      "Description": "Indicates that minor engine upgrades will be applied automatically to the DB instance during the maintenance window.",
+      "AllowedValues": [
+        "True",
+        "False"
+      ]
+    },
+    "InternalZoneName": {
+      "Default": "",
+      "Type": "String",
+      "Description": "TLD for Internal Hosted Zone"
+    },
+    "RDSVolumeSize": {
+      "Description": "Select RDS Volume Size in GB.",
+      "Default": "10",
+      "ConstraintDescription": "Must be between 5 and 6144",
+      "MaxValue": "6144",
+      "MinValue": "5",
+      "Type": "Number"
+    },
+    "CWFreeStorageSpaceLimit": {
+      "Default": "1024000000",
+      "Type": "Number",
+      "Description": "CloudWatch Free Storage Space Limit Threshold (Bytes)"
+    },
+    "CWReadIopsLimit": {
+      "Default": "100",
+      "Type": "Number",
+      "Description": "CloudWatch Read IOPSLimit Threshold"
+    },
+    "BackupRetentionPeriod": {
+      "Description": "The number of days for which automated backups are retained. Setting this parameter to a positive number enables backups. Setting this parameter to 0 disables automated backups. Compass best practice is 30 or more days.",
+      "Default": "35",
+      "ConstraintDescription": "Must be between 0 and 35.",
+      "MaxValue": "35",
+      "MinValue": "0",
+      "Type": "Number"
+    },
+    "DBName": {
+      "Description": "The meaning of this parameter differs according to the database engine you use.",
+      "Default": "MyRDS",
+      "MinLength": 0,
+      "MaxLength": 64,
+      "ConstraintDescription": "String length must be between 0 and 64.",
+      "Type": "String"
+    },
+    "PreferredMaintenanceWindow": {
+      "AllowedPattern": "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun):[0-9]{2}:[0-9]{2}-(Mon|Tue|Wed|Thu|Fri|Sat|Sun):[0-9]{2}:[0-9]{2}$",
+      "Default": "Sun:07:00-Sun:08:00",
+      "Type": "String",
+      "Description": "The daily time range during which automated backups are created if automated backups are enabled.",
+      "ConstraintDescription": "Must be in the format ddd:hh24:mi-ddd:hh24:mi"
+    },
+    "StorageEncrypted": {
+      "Default": "False",
+      "Type": "String",
+      "ConstraintDescription": "Must be either True or False.",
+      "Description": "Specifies whether the DB instance is encrypted.",
+      "AllowedValues": [
+        "True",
+        "False"
+      ]
+    },
+    "MultiAZ": {
+      "Default": "True",
+      "Type": "String",
+      "ConstraintDescription": "Must be either True or False.",
+      "Description": "Create a multi-AZ RDS database instance",
+      "AllowedValues": [
+        "True",
+        "False"
+      ]
+    },
+    "CWCPUThreshold": {
+      "Default": "60",
+      "Type": "Number",
+      "Description": "CloudWatch CPUUtilization Threshold"
+    },
+    "EnhancedMonitoringRoleManagedPolicyArns": {
+      "Default": "",
+      "Type": "String",
+      "Description": "A comma delimited list of IAM policy ARNs for the EnhancedMonitoringRole IAM role.  IAM ARNs can be found within the Policies section of the AWS IAM console."
+    },
+    "EnhancedMonitoringInterval": {
+      "Default": "Disabled",
+      "Type": "String",
+      "Description": "Indicates the interval, in seconds, between points when metrics are collected for the RDS instance.",
+      "AllowedValues": [
+        "Disabled",
+        "1",
+        "5",
+        "10",
+        "15",
+        "30",
+        "60"
+      ]
+    },
+    "NotificationTopic": {
+      "Default": "",
+      "AllowedPattern": "^arn:aws:sns:(us|eu|ap|sa|ca)-(east|west|north|south|southeast|northeast|central)-[1-9]:[0-9]{12}:.+$||^$",
+      "Type": "String",
+      "Description": "SNS Topic ARN to notify if there are any alarms. (OPTIONAL)"
+    },
+    "DeletionProtection": {
+      "Default": "true",
+      "Type": "String",
+      "Description": "Indicates whether the DB instance should have deletion protection enabled. The database can't be deleted when this value is set to true. If you want to delete a stack with a protected instance, update this value to false before you delete the stack.",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "PreferredBackupWindow": {
+      "AllowedPattern": "^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$",
+      "Default": "05:00-06:00",
+      "Type": "String",
+      "Description": "The daily time range during which automated backups are created if automated backups are enabled.",
+      "ConstraintDescription": "Must be in the format hh24:mi-hh24:mi"
+    },
+    "ExistingSubnetGroup": {
+      "AllowedPattern": "^[a-zA-Z0-9\\-_\\. ]{0,255}$",
+      "Default": "",
+      "Type": "String",
+      "Description": "The existing DB subnet group to use for this instance. (OPTIONAL)",
+      "ConstraintDescription": "Must contain from 0 to 255 characters. Alphanumeric characters, spaces, hyphens, underscores, and periods are allowed."
+    },
+    "RDSKMSRoleManagedPolicyArns": {
+      "Default": "",
+      "Type": "CommaDelimitedList",
+      "Description": "A comma delimited list of IAM policy ARNs for the RDSKMSRole IAM role.  IAM ARNs can be found within the Policies section of the AWS IAM console."
+    },
+    "Port": {
+      "Description": "The port number on which the database accepts connections.",
+      "Default": "3306",
+      "ConstraintDescription": "Must be between 1150 and 65535.",
+      "MaxValue": "65535",
+      "MinValue": "1150",
+      "Type": "Number"
+    },
+    "KmsKeyId": {
+      "AllowedPattern": "^arn:aws:kms:(us|eu|ap|sa|ca)-(east|west|north|south|southeast|northeast|central)-[1-9]:[0-9]+:(key|alias)/.+$||^$",
+      "Default": "",
+      "Type": "String",
+      "Description": "KMS Key Arn to use for storage encryption. Will also be used for Secrets Manager (OPTIONAL)",
+      "ConstraintDescription": "Must be a valid KMS Key ID."
+    },
+    "RDSVolumeIops": {
+      "Default": "0",
+      "Type": "Number",
+      "Description": "Iops value required for use. Typically 3 x Volume Size"
+    },
+    "Timezone": {
+      "Default": "",
+      "Type": "String",
+      "Description": "The server time zone",
+      "AllowedValues": [
+        "",
+        "Africa/Cairo",
+        "Africa/Casablanca",
+        "Africa/Harare",
+        "Africa/Monrovia",
+        "Africa/Nairobi",
+        "Africa/Tripoli",
+        "Africa/Windhoek",
+        "America/Araguaina",
+        "America/Asuncion",
+        "America/Bogota",
+        "America/Buenos_Aires",
+        "America/Caracas",
+        "America/Chihuahua",
+        "America/Cuiaba",
+        "America/Denver",
+        "America/Fortaleza",
+        "America/Guatemala",
+        "America/Halifax",
+        "America/Manaus",
+        "America/Matamoros",
+        "America/Monterrey",
+        "America/Montevideo",
+        "America/Phoenix",
+        "America/Santiago",
+        "America/Tijuana",
+        "Asia/Amman",
+        "Asia/Ashgabat",
+        "Asia/Baghdad",
+        "Asia/Baku",
+        "Asia/Bangkok",
+        "Asia/Beirut",
+        "Asia/Calcutta",
+        "Asia/Damascus",
+        "Asia/Dhaka",
+        "Asia/Irkutsk",
+        "Asia/Jerusalem",
+        "Asia/Kabul",
+        "Asia/Karachi",
+        "Asia/Kathmandu",
+        "Asia/Krasnoyarsk",
+        "Asia/Magadan",
+        "Asia/Muscat",
+        "Asia/Novosibirsk",
+        "Asia/Riyadh",
+        "Asia/Seoul",
+        "Asia/Shanghai",
+        "Asia/Singapore",
+        "Asia/Taipei",
+        "Asia/Tehran",
+        "Asia/Tokyo",
+        "Asia/Ulaanbaatar",
+        "Asia/Vladivostok",
+        "Asia/Yakutsk",
+        "Asia/Yerevan",
+        "Atlantic/Azores",
+        "Australia/Adelaide",
+        "Australia/Brisbane",
+        "Australia/Darwin",
+        "Australia/Hobart",
+        "Australia/Perth",
+        "Australia/Sydney",
+        "Canada/Newfoundland",
+        "Canada/Saskatchewan",
+        "Brazil/East",
+        "Europe/Amsterdam",
+        "Europe/Athens",
+        "Europe/Dublin",
+        "Europe/Helsinki",
+        "Europe/Istanbul",
+        "Europe/Kaliningrad",
+        "Europe/Moscow",
+        "Europe/Paris",
+        "Europe/Prague",
+        "Europe/Sarajevo",
+        "Pacific/Auckland",
+        "Pacific/Fiji",
+        "Pacific/Guam",
+        "Pacific/Honolulu",
+        "Pacific/Samoa",
+        "US/Alaska",
+        "US/Central",
+        "US/Eastern",
+        "US/East-Indiana",
+        "US/Pacific",
+        "UTC"
+      ]
+    },
+    "DBInstanceClass": {
+      "Default": "db.m3.xlarge",
+      "Type": "String",
+      "ConstraintDescription": "Must select a valid database instance type.",
+      "Description": "The database instance type.",
+      "AllowedValues": [
+        "db.t2.micro",
+        "db.t2.small",
+        "db.t2.medium",
+        "db.t2.large",
+        "db.t2.xlarge",
+        "db.t2.2xlarge",
+        "db.r3.large",
+        "db.r3.xlarge",
+        "db.r3.2xlarge",
+        "db.r3.4xlarge",
+        "db.r3.8xlarge",
+        "db.r4.large",
+        "db.r4.xlarge",
+        "db.r4.2xlarge",
+        "db.r4.4xlarge",
+        "db.r4.8xlarge",
+        "db.r4.16xlarge",
+        "db.r5.large",
+        "db.r5.xlarge",
+        "db.r5.2xlarge",
+        "db.r5.4xlarge",
+        "db.r5.12xlarge",
+        "db.r5.24xlarge",
+        "db.m3.medium",
+        "db.m3.large",
+        "db.m3.xlarge",
+        "db.m3.2xlarge",
+        "db.m4.large",
+        "db.m4.xlarge",
+        "db.m4.2xlarge",
+        "db.m4.4xlarge",
+        "db.m4.10xlarge",
+        "db.m4.16xlarge",
+        "db.m5.large",
+        "db.m5.xlarge",
+        "db.m5.2xlarge",
+        "db.m5.4xlarge",
+        "db.m5.12xlarge",
+        "db.m5.24xlarge"
+      ]
+    },
+    "InternalZoneId": {
+      "Default": "",
+      "Type": "String",
+      "Description": "The Route53 Internal Hosted Zone ID"
+    },
+    "DBSnapshotName": {
+      "Default": "",
+      "Type": "String",
+      "Description": "The name of a DB snapshot (optional)."
+    },
+    "DBInstanceIdentifier": {
+      "Description": "The DB instance identifier. This parameter is stored as a lowercase string. (OPTIONAL)",
+      "Default": "",
+      "Type": "String",
+      "AllowedPattern": "^([a-z0-9]+-?)*[a-z0-9]$||^$",
+      "MaxLength": 63,
+      "ConstraintDescription": "Must contain from 0 to 63 lowercase alphanumeric characters or hyphens (0 to 15 for SQL Server).  First character must be a letter. Cannot end with a hyphen or contain two consecutive hyphens."
+    }
+  },
+  "Conditions": {
+    "NewOptionGroup": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingOptionGroup"
+        },
+        ""
+      ]
+    },
+    "isInternalHostedZoneIdProvided": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "InternalZoneId"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "UseDBSnapshot": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DBSnapshotName"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "UseDBIdentifier": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DBInstanceIdentifier"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "IopsEnabled": {
+      "Fn::Equals": [
+        {
+          "Ref": "RDSVolumeType"
+        },
+        "io1"
+      ]
+    },
+    "EnhancedMonitoringRolePoliciesSet": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "EnhancedMonitoringRoleManagedPolicyArns"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "UseEnhancedMonitoring": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "EnhancedMonitoringInterval"
+            },
+            "Disabled"
+          ]
+        }
+      ]
+    },
+    "UseDBNameVersion": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DBNameVersion"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateEventSubscription": {
+      "Fn::And": [
+        {
+          "Condition": "isNotification"
+        },
+        {
+          "Fn::Not": [
+            {
+              "Fn::Equals": [
+                {
+                  "Fn::Select": [
+                    "0",
+                    {
+                      "Ref": "EventCategories"
+                    }
+                  ]
+                },
+                ""
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "NewParameterGroup": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingParameterGroup"
+        },
+        ""
+      ]
+    },
+    "SecretsManagerEnabled": {
+      "Fn::Equals": [
+        {
+          "Ref": "MasterUserPassword"
+        },
+        ""
+      ]
+    },
+    "isNotification": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "NotificationTopic"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "NewSubnetGroup": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingSubnetGroup"
+        },
+        ""
+      ]
+    },
+    "isTimezoneEnabled": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Timezone"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "RDSKMSRolePoliciesSet": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Fn::Select": [
+                "0",
+                {
+                  "Ref": "RDSKMSRoleManagedPolicyArns"
+                }
+              ]
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "SetKmsKey": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "KmsKeyId"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Mappings": {
+    "RdsEngineVersions": {
+      "mysql-5.6.37": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.6.37",
+        "DBParameterGroupFamily": "mysql5.6",
+        "MajorEngineVersion": "5.6"
+      },
+      "mysql-5.6.35": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.6.35",
+        "DBParameterGroupFamily": "mysql5.6",
+        "MajorEngineVersion": "5.6"
+      },
+      "mysql-5.6.34": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.6.34",
+        "DBParameterGroupFamily": "mysql5.6",
+        "MajorEngineVersion": "5.6"
+      },
+      "mysql-5.5.61": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.5.61",
+        "DBParameterGroupFamily": "mysql5.5",
+        "MajorEngineVersion": "5.5"
+      },
+      "mysql-5.5.59": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.5.59",
+        "DBParameterGroupFamily": "mysql5.5",
+        "MajorEngineVersion": "5.5"
+      },
+      "mysql-5.7.19": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.7.19",
+        "DBParameterGroupFamily": "mysql5.7",
+        "MajorEngineVersion": "5.7"
+      },
+      "mysql-5.5.54": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.5.54",
+        "DBParameterGroupFamily": "mysql5.5",
+        "MajorEngineVersion": "5.5"
+      },
+      "mysql-5.5.46": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.5.46",
+        "DBParameterGroupFamily": "mysql5.5",
+        "MajorEngineVersion": "5.5"
+      },
+      "mysql-5.5.57": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.5.57",
+        "DBParameterGroupFamily": "mysql5.5",
+        "MajorEngineVersion": "5.5"
+      },
+      "mysql-5.6.39": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.6.39",
+        "DBParameterGroupFamily": "mysql5.6",
+        "MajorEngineVersion": "5.6"
+      },
+      "mysql-5.5.53": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.5.53",
+        "DBParameterGroupFamily": "mysql5.5",
+        "MajorEngineVersion": "5.5"
+      },
+      "mysql-5.7.23": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.7.23",
+        "DBParameterGroupFamily": "mysql5.7",
+        "MajorEngineVersion": "5.7"
+      },
+      "mysql-5.7.16": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.7.16",
+        "DBParameterGroupFamily": "mysql5.7",
+        "MajorEngineVersion": "5.7"
+      },
+      "mysql-5.7.21": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.7.21",
+        "DBParameterGroupFamily": "mysql5.7",
+        "MajorEngineVersion": "5.7"
+      },
+      "mysql-5.7.17": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.7.17",
+        "DBParameterGroupFamily": "mysql5.7",
+        "MajorEngineVersion": "5.7"
+      },
+      "mysql-8.0.11": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "8.0.11",
+        "DBParameterGroupFamily": "mysql8.0",
+        "MajorEngineVersion": "8.0"
+      },
+      "mysql-5.6.40": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.6.40",
+        "DBParameterGroupFamily": "mysql5.6",
+        "MajorEngineVersion": "5.6"
+      },
+      "mysql-5.6.41": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.6.41",
+        "DBParameterGroupFamily": "mysql5.6",
+        "MajorEngineVersion": "5.6"
+      },
+      "mysql-8.0.13": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "8.0.13",
+        "DBParameterGroupFamily": "mysql8.0",
+        "MajorEngineVersion": "8.0"
+      },
+      "mysql-5.7.22": {
+        "Engine": "mysql",
+        "MinorEngineVersion": "5.7.22",
+        "DBParameterGroupFamily": "mysql5.7",
+        "MajorEngineVersion": "5.7"
+      }
+    }
+  },
+  "Resources": {
+    "InternalRecordSet": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "Comment": {
+          "Fn::Sub": "Internal Record Set for ${InternalRecordName}"
+        },
+        "Name": {
+          "Fn::Sub": "${InternalRecordName}.${InternalZoneName}."
+        },
+        "ResourceRecords": [
+          {
+            "Fn::GetAtt": [
+              "RDSInstance",
+              "Endpoint.Address"
+            ]
+          }
+        ],
+        "TTL": "300",
+        "HostedZoneId": {
+          "Ref": "InternalZoneId"
+        },
+        "Type": "CNAME"
+      },
+      "Condition": "isInternalHostedZoneIdProvided"
+    },
+    "RDSKMSPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "RDSKMSPolicy",
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "secretsmanager:CreateSecret",
+                "secretsmanager:TagResource",
+                "kms:GenerateDataKey",
+                "kms:Decrypt"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+            }
+          ]
+        },
+        "Roles": [
+          {
+            "Ref": "RDSKMSRole"
+          }
+        ]
+      },
+      "Condition": "SecretsManagerEnabled"
+    },
+    "WriteIOPSHigh": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "EvaluationPeriods": "5",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "RDSInstance"
+            }
+          }
+        ],
+        "AlarmActions": [
+          {
+            "Fn::If": [
+              "isNotification",
+              {
+                "Ref": "NotificationTopic"
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "AlarmDescription": {
+          "Fn::Sub": "Alarm if ${RDSInstance} WriteIOPs > ${CWWriteIopsLimit} for 5 minutes"
+        },
+        "Namespace": "AWS/RDS",
+        "Period": "60",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Statistic": "Average",
+        "Threshold": {
+          "Ref": "CWWriteIopsLimit"
+        },
+        "OKActions": [],
+        "MetricName": "WriteIOPS"
+      }
+    },
+    "EnhancedMonitoringRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Path": "/",
+        "ManagedPolicyArns": {
+          "Fn::Split": [
+            ",",
+            {
+              "Fn::Join": [
+                ",",
+                [
+                  "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole",
+                  {
+                    "Fn::If": [
+                      "EnhancedMonitoringRolePoliciesSet",
+                      {
+                        "Ref": "EnhancedMonitoringRoleManagedPolicyArns"
+                      },
+                      {
+                        "Ref": "AWS::NoValue"
+                      }
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "monitoring.rds.amazonaws.com"
+              }
+            }
+          ]
+        }
+      },
+      "Condition": "UseEnhancedMonitoring"
+    },
+    "FreeStorageSpaceEmail": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "EvaluationPeriods": "30",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "RDSInstance"
+            }
+          }
+        ],
+        "AlarmActions": [
+          {
+            "Fn::If": [
+              "isNotification",
+              {
+                "Ref": "NotificationTopic"
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "AlarmDescription": "Free storage space has fallen below threshold, sending email notification.",
+        "Namespace": "AWS/RDS",
+        "Period": "60",
+        "ComparisonOperator": "LessThanOrEqualToThreshold",
+        "Statistic": "Average",
+        "Threshold": "3072000000",
+        "OKActions": [],
+        "Unit": "Bytes",
+        "MetricName": "FreeStorageSpace"
+      }
+    },
+    "SecretTargetAttachment": {
+      "Type": "AWS::SecretsManager::SecretTargetAttachment",
+      "Properties": {
+        "TargetType": "AWS::RDS::DBInstance",
+        "SecretId": {
+          "Ref": "RDSSecret"
+        },
+        "TargetId": {
+          "Ref": "RDSInstance"
+        }
+      },
+      "Condition": "SecretsManagerEnabled"
+    },
+    "RDSOptionGroup": {
+      "DeletionPolicy": "Retain",
+      "Type": "AWS::RDS::OptionGroup",
+      "Properties": {
+        "OptionGroupDescription": {
+          "Fn::Sub": "${Environment}-OptionGroup"
+        },
+        "EngineName": {
+          "Fn::FindInMap": [
+            "RdsEngineVersions",
+            {
+              "Ref": "EngineVersion"
+            },
+            "Engine"
+          ]
+        },
+        "OptionConfigurations": {
+          "Ref": "AWS::NoValue"
+        },
+        "MajorEngineVersion": {
+          "Fn::FindInMap": [
+            "RdsEngineVersions",
+            {
+              "Ref": "EngineVersion"
+            },
+            "MajorEngineVersion"
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Key": "ServiceProvider",
+            "Value": "Genese"
+          }
+        ]
+      },
+      "Condition": "NewOptionGroup"
+    },
+    "DBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "SubnetIds": {
+          "Ref": "Subnets"
+        },
+        "DBSubnetGroupDescription": "RDS DB Subnet",
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Key": "ServiceProvider",
+            "Value": "Genese"
+          }
+        ]
+      },
+      "Condition": "NewSubnetGroup"
+    },
+    "RDSSecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "Properties": {
+        "GenerateSecretString": {
+          "SecretStringTemplate": {
+            "Fn::Sub": "{\"username\":\"${MasterUsername}\"}"
+          },
+          "ExcludeLowercase": "false",
+          "ExcludeNumbers": "false",
+          "RequireEachIncludedType": "true",
+          "ExcludePunctuation": "false",
+          "IncludeSpace": "false",
+          "GenerateStringKey": "password",
+          "ExcludeCharacters": "\"$%&'*+,-./:;@.`|~",
+          "ExcludeUppercase": "false",
+          "PasswordLength": 24
+        },
+        "KmsKeyId": {
+          "Fn::If": [
+            "SetKmsKey",
+            {
+              "Ref": "KmsKeyId"
+            },
+            "alias/aws/secretsmanager"
+          ]
+        },
+        "Description": {
+          "Fn::Sub": "RDS password for ${AWS::StackName}"
+        },
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "SecretsManagedRDSPassword",
+            "Value": "True"
+          },
+          {
+            "Key": "ServiceProvider",
+            "Value": "Genese"
+          },
+          {
+            "Key": "StackName",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-RDS-Password"
+            }
+          }
+        ]
+      },
+      "Condition": "SecretsManagerEnabled"
+    },
+    "CPUAlarmHigh": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "EvaluationPeriods": "15",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "RDSInstance"
+            }
+          }
+        ],
+        "AlarmActions": [
+          {
+            "Fn::If": [
+              "isNotification",
+              {
+                "Ref": "NotificationTopic"
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "AlarmDescription": {
+          "Fn::Sub": "Alarm if ${RDSInstance} CPU > ${CWCPUThreshold}% for 15 minutes"
+        },
+        "Namespace": "AWS/RDS",
+        "Period": "60",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Statistic": "Average",
+        "Threshold": {
+          "Ref": "CWCPUThreshold"
+        },
+        "OKActions": [],
+        "MetricName": "CPUUtilization"
+      }
+    },
+    "ReadIOPSHigh": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "EvaluationPeriods": "5",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "RDSInstance"
+            }
+          }
+        ],
+        "AlarmActions": [
+          {
+            "Fn::If": [
+              "isNotification",
+              {
+                "Ref": "NotificationTopic"
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "AlarmDescription": {
+          "Fn::Sub": "Alarm if ${RDSInstance} ReadIOPs > ${CWReadIopsLimit} for 5 minutes"
+        },
+        "Namespace": "AWS/RDS",
+        "Period": "60",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Statistic": "Average",
+        "Threshold": {
+          "Ref": "CWReadIopsLimit"
+        },
+        "OKActions": [],
+        "MetricName": "ReadIOPS"
+      }
+    },
+    "EventSubscription": {
+      "Type": "AWS::RDS::EventSubscription",
+      "Properties": {
+        "SourceIds": [
+          {
+            "Ref": "RDSInstance"
+          }
+        ],
+        "EventCategories": {
+          "Ref": "EventCategories"
+        },
+        "SourceType": "db-instance",
+        "SnsTopicArn": {
+          "Ref": "NotificationTopic"
+        }
+      },
+      "Condition": "CreateEventSubscription"
+    },
+    "FreeStorageSpaceTicket": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "EvaluationPeriods": "30",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "RDSInstance"
+            }
+          }
+        ],
+        "AlarmActions": [
+          {
+            "Fn::Sub": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:Genese-support-urgent"
+          },
+          {
+            "Fn::If": [
+              "isNotification",
+              {
+                "Ref": "NotificationTopic"
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "AlarmDescription": "Free storage space has fallen below threshold, generating ticket.",
+        "Namespace": "AWS/RDS",
+        "Period": "60",
+        "ComparisonOperator": "LessThanOrEqualToThreshold",
+        "Statistic": "Average",
+        "Threshold": {
+          "Ref": "CWFreeStorageSpaceLimit"
+        },
+        "OKActions": [
+          {
+            "Fn::Sub": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:Genese-support-urgent"
+          }
+        ],
+        "Unit": "Bytes",
+        "MetricName": "FreeStorageSpace"
+      }
+    },
+    "RDSKMSRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Path": "/",
+        "ManagedPolicyArns": {
+          "Fn::If": [
+            "RDSKMSRolePoliciesSet",
+            {
+              "Ref": "RDSKMSRoleManagedPolicyArns"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "rds.amazonaws.com"
+              }
+            }
+          ]
+        }
+      },
+      "Condition": "SecretsManagerEnabled"
+    },
+    "RDSParameterGroup": {
+      "DeletionPolicy": "Retain",
+      "Type": "AWS::RDS::DBParameterGroup",
+      "Properties": {
+        "Parameters": {
+          "Fn::If": [
+            "isTimezoneEnabled",
+            {
+              "time_zone": {
+                "Ref": "Timezone"
+              }
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "Description": {
+          "Fn::Sub": "${Environment}-ParameterGroup"
+        },
+        "Family": {
+          "Fn::FindInMap": [
+            "RdsEngineVersions",
+            {
+              "Ref": "EngineVersion"
+            },
+            "DBParameterGroupFamily"
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Key": "ServiceProvider",
+            "Value": "Genese"
+          }
+        ]
+      },
+      "Condition": "NewParameterGroup"
+    },
+    "RDSInstance": {
+      "DeletionPolicy": "Snapshot",
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBParameterGroupName": {
+          "Fn::If": [
+            "NewParameterGroup",
+            {
+              "Ref": "RDSParameterGroup"
+            },
+            {
+              "Ref": "ExistingParameterGroup"
+            }
+          ]
+        },
+        "PubliclyAccessible": {
+          "Ref": "PubliclyAccessible"
+        },
+        "MasterUsername": {
+          "Fn::If": [
+            "UseDBSnapshot",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            {
+              "Ref": "MasterUsername"
+            }
+          ]
+        },
+        "MonitoringInterval": {
+          "Fn::If": [
+            "UseEnhancedMonitoring",
+            {
+              "Ref": "EnhancedMonitoringInterval"
+            },
+            "0"
+          ]
+        },
+        "VPCSecurityGroups": {
+          "Ref": "SecurityGroupList"
+        },
+        "CopyTagsToSnapshot": {
+          "Ref": "CopyTagsToSnapshot"
+        },
+        "Engine": {
+          "Fn::FindInMap": [
+            "RdsEngineVersions",
+            {
+              "Ref": "EngineVersion"
+            },
+            "Engine"
+          ]
+        },
+        "MultiAZ": {
+          "Ref": "MultiAZ"
+        },
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "DBName"
+            }
+          },
+          {
+            "Key": "ServiceProvider",
+            "Value": "Genese"
+          }
+        ],
+        "AutoMinorVersionUpgrade": {
+          "Ref": "AutoMinorVersionUpgrade"
+        },
+        "PreferredBackupWindow": {
+          "Ref": "PreferredBackupWindow"
+        },
+        "DBSnapshotIdentifier": {
+          "Fn::If": [
+            "UseDBSnapshot",
+            {
+              "Ref": "DBSnapshotName"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "AllocatedStorage": {
+          "Ref": "RDSVolumeSize"
+        },
+        "DBSubnetGroupName": {
+          "Fn::If": [
+            "NewSubnetGroup",
+            {
+              "Ref": "DBSubnetGroup"
+            },
+            {
+              "Ref": "ExistingSubnetGroup"
+            }
+          ]
+        },
+        "DBName": {
+          "Ref": "DBName"
+        },
+        "PreferredMaintenanceWindow": {
+          "Ref": "PreferredMaintenanceWindow"
+        },
+        "EngineVersion": {
+          "Fn::FindInMap": [
+            "RdsEngineVersions",
+            {
+              "Ref": "EngineVersion"
+            },
+            "MinorEngineVersion"
+          ]
+        },
+        "BackupRetentionPeriod": {
+          "Ref": "BackupRetentionPeriod"
+        },
+        "OptionGroupName": {
+          "Fn::If": [
+            "NewOptionGroup",
+            {
+              "Ref": "RDSOptionGroup"
+            },
+            {
+              "Ref": "ExistingOptionGroup"
+            }
+          ]
+        },
+        "DeletionProtection": {
+          "Ref": "DeletionProtection"
+        },
+        "MonitoringRoleArn": {
+          "Fn::If": [
+            "UseEnhancedMonitoring",
+            {
+              "Fn::GetAtt": [
+                "EnhancedMonitoringRole",
+                "Arn"
+              ]
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "StorageType": {
+          "Ref": "RDSVolumeType"
+        },
+        "MasterUserPassword": {
+          "Fn::If": [
+            "UseDBSnapshot",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            {
+              "Fn::If": [
+                "SecretsManagerEnabled",
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "{{resolve:secretsmanager:",
+                      {
+                        "Ref": "RDSSecret"
+                      },
+                      ":SecretString:password}}"
+                    ]
+                  ]
+                },
+                {
+                  "Ref": "MasterUserPassword"
+                }
+              ]
+            }
+          ]
+        },
+        "KmsKeyId": {
+          "Fn::If": [
+            "SetKmsKey",
+            {
+              "Ref": "KmsKeyId"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "StorageEncrypted": {
+          "Fn::If": [
+            "SetKmsKey",
+            "True",
+            {
+              "Ref": "StorageEncrypted"
+            }
+          ]
+        },
+        "DBInstanceClass": {
+          "Ref": "DBInstanceClass"
+        },
+        "Iops": {
+          "Fn::If": [
+            "IopsEnabled",
+            {
+              "Ref": "RDSVolumeIops"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "Port": {
+          "Ref": "Port"
+        },
+        "DBInstanceIdentifier": {
+          "Fn::If": [
+            "UseDBIdentifier",
+            {
+              "Fn::Join": [
+                "-",
+                [
+                  {
+                    "Ref": "DBInstanceIdentifier"
+                  },
+                  {
+                    "Fn::If": [
+                      "UseDBNameVersion",
+                      {
+                        "Ref": "DBNameVersion"
+                      },
+                      {
+                        "Ref": "AWS::NoValue"
+                      }
+                    ]
+                  }
+                ]
+              ]
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "JDBCConnectionString": {
+      "Description": "JDBC connection string for database",
+      "Value": {
+        "Fn::Sub": "jdbc:mysql://${RDSInstance.Endpoint.Address}:${RDSInstance.Endpoint.Port}/${DBName}"
+      }
+    },
+    "DBPort": {
+      "Description": "Database endpoint port number",
+      "Value": {
+        "Fn::Sub": "${RDSInstance.Endpoint.Port}"
+      }
+    },
+    "RDSEndpoint": {
+      "Description": "CNAME of the RDS Instance",
+      "Value": {
+        "Fn::Sub": "${RDSInstance.Endpoint.Address}:${RDSInstance.Endpoint.Port}"
+      }
+    },
+    "DBInstanceIdentifier": {
+      "Description": "RDS Instance identifier",
+      "Value": {
+        "Ref": "RDSInstance"
+      }
+    },
+    "DBAddress": {
+      "Description": "Address of database endpoint",
+      "Value": {
+        "Fn::Sub": "${RDSInstance.Endpoint.Address}"
+      }
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Security_Groups.template:Genese Hosting - Creates Security Groups.",
+  "Metadata": {
+
+  },
+  "Parameters": {
+    "Environment": {
+      "Default": "Production",
+      "Type": "String",
+      "Description": "Application environment for which this network is being created. e.g. Development/Production.",
+      "AllowedValues": ["Development", "Integration", "PreProduction", "Production", "production", "Test", "Staging"]
+    },
+    "VPCID": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "Select Virtual Private Cloud ID."
+    }
+  },
+  "Mappings": {
+  },
+  "Conditions": {
+  },
+  "Resources": {
+    "ALBSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [
+          {"ToPort": 80, "IpProtocol": "tcp", "CidrIp": "0.0.0.0/0", "FromPort": 80},
+          {"ToPort": 443, "IpProtocol": "tcp", "CidrIp": "0.0.0.0/0", "FromPort": 443}
+        ],
+        "VpcId": {
+          "Ref": "VPCID"
+        },
+        "Tags" : [
+          { "Key": "ServiceProvider", "Value": "Genese" },
+          { "Key": "Name", "Value": "ALBSG" }
+        ],
+        "GroupDescription": "Allows traffic from public to Application Load Balancer"
+      }
+    },
+    "EC2SG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [
+          {"ToPort": 80, "IpProtocol": "tcp", "SourceSecurityGroupId": {"Ref": "ALBSG"}, "FromPort": 80},
+          {"ToPort": 8080, "IpProtocol": "tcp", "SourceSecurityGroupId": {"Ref": "ALBSG"}, "FromPort": 8080},
+          {"ToPort": 443, "IpProtocol": "tcp", "SourceSecurityGroupId": {"Ref": "ALBSG"}, "FromPort": 443},
+          {"ToPort": 22, "IpProtocol": "tcp", "SourceSecurityGroupId": {"Ref": "EC2BastionSG"}, "FromPort": 22}
+          ],
+        "VpcId": {
+          "Ref": "VPCID"
+        },
+        "Tags" : [
+          { "Key": "ServiceProvider", "Value": "Genese" },
+          { "Key": "Name", "Value": "EC2SG" }
+        ],
+        "GroupDescription": "Allow Access from ALB to Apache/Netty."
+      }
+    },
+    "EC2BastionSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [
+          {"ToPort": 22, "IpProtocol": "tcp", "CidrIp": "0.0.0.0/0", "FromPort": 22}
+        ],
+        "VpcId": {
+          "Ref": "VPCID"
+        },
+        "Tags" : [
+          { "Key": "ServiceProvider", "Value": "Genese" },
+          { "Key": "Name", "Value": "EC2BastionSG" }
+        ],
+        "GroupDescription": "Allow Access from public."
+      }
+    },
+    "RDSSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [
+          {"ToPort": 3306, "IpProtocol": "tcp", "SourceSecurityGroupId": {"Ref": "EC2SG"}, "FromPort": 3306}
+          ],
+        "VpcId": {
+          "Ref": "VPCID"
+        },
+        "Tags" : [
+          { "Key": "ServiceProvider", "Value": "Genese" },
+          { "Key": "Name", "Value": "RDSSG" }
+        ],
+        "GroupDescription": "Allow Access to RDS Instances."
+      }
+    },
+    "MemcachedSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupIngress": [
+          {"ToPort": 11211, "IpProtocol": "tcp", "SourceSecurityGroupId": {"Ref": "EC2SG"}, "FromPort": 11211}
+          ],
+        "VpcId": {
+          "Ref": "VPCID"
+        },
+        "Tags" : [
+          { "Key": "ServiceProvider", "Value": "Genese" },
+          { "Key": "Name", "Value": "MemcachedSG" }
+        ],
+        "GroupDescription": "Allow Access to ElastiCache Memcached."
+      }
+    }
+  },
+  "Outputs": {
+    "ALBSG": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ALBSG",
+          "GroupId"
+        ]
+      }
+    },
+    "EC2SG": {
+      "Value": {
+        "Fn::GetAtt": [
+          "EC2SG",
+          "GroupId"
+        ]
+      }
+    },
+    "RDSSG": {
+      "Value": {
+        "Fn::GetAtt": [
+          "RDSSG",
+          "GroupId"
+        ]
+      }
+    },
+    "EC2BastionSG": {
+      "Value": {
+        "Fn::GetAtt": [
+          "EC2BastionSG",
+          "GroupId"
+        ]
+      }
+    },
+    "MemcachedSG": {
+      "Value": {
+        "Fn::GetAtt": [
+          "MemcachedSG",
+          "GroupId"
+        ]
+      }
+    }
+  }
+}
